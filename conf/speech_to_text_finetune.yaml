@@ -1,239 +1,246 @@
-name: "Speech_To_Text_Finetuning"
+name: "Vietnamese_Speech_To_Text_Finetuning"  
+init_from_nemo_model: null  
+init_from_pretrained_model: "nvidia/parakeet-tdt-0.6b-v2"  
 
-# use `init_from_nemo_model` or `init_from_pretrained_model` to initialize the model
-# We do not currently support `init_from_ptl_ckpt` to create a single script for all types of models.
-init_from_nemo_model: null # path to nemo model
-init_from_pretrained_model: "nvidia/parakeet-tdt-0.6b-v2"
-dataset:
-  train_manifest: /root/training_parakeet_vi/dataset/train_manifest.json
-  validation_manifest: /root/training_parakeet_vi/dataset/validation_manifest.json
-  test_manifest: /root/training_parakeet_vi/dataset/test_manifest.json
+dataset:  
+  train_manifest: /root/training-nemo-vi/dataset/train_manifest.json  
+  validation_manifest: /root/training-nemo-vi/dataset/validation_manifest.json  
+  test_manifest: /root/training-nemo-vi/dataset/test_manifest.json  
 
-model:
-  sample_rate: 16000
-  compute_eval_loss: false
-  log_prediction: true
-  rnnt_reduction: mean_volume
-  skip_nan_grad: false
-  model_defaults:
-    enc_hidden: 1024
-    pred_hidden: 640
-    joint_hidden: 640
-    tdt_durations: [0, 1, 2, 3, 4]
-    num_tdt_durations: 5
-  train_ds:
-    manifest_filepath: ${dataset.train_manifest}
-    batch_size: 60
-    use_lhotse: true
-    skip_missing_manifest_entries: true
-    input_cfg: null
-    tarred_audio_filepaths: null
-    sample_rate: ${model.sample_rate}
-    shuffle: true
-    num_workers: 26
-    pin_memory: true
-    max_duration: 40.0
-    min_duration: 0.1
-    text_field: text
-    batch_duration: null
-    use_bucketing: false
-    bucket_duration_bins: null
-    bucket_batch_size: null
-    num_buckets: 30
-    bucket_buffer_size: 20000
-    shuffle_buffer_size: 10000
-  validation_ds:
-    manifest_filepath: ${dataset.validation_manifest}
-    use_lhotse: true
-    sample_rate: ${model.sample_rate}
-    batch_size: 60
-    shuffle: false
-    max_duration: 40.0
-    min_duration: 0.1
-    num_workers: 10
-    pin_memory: true
-    text_field: text
-  test_ds:
-    manifest_filepath: ${dataset.test_manifest}
-    sample_rate: ${model.sample_rate}
-    batch_size: 60
-    shuffle: false
-    use_start_end_token: false
-    num_workers: 20
-    pin_memory: true
+tokenizer_dir: /root/training-nemo-vi/vietnamese_tokenizer/tokenizer_spe_bpe_v4096  
 
-  char_labels: # use for char based models
-    update_labels: false
-    labels: null # example list config: \[' ', 'a', 'b', 'c'\]
+model:  
+  sample_rate: 16000  
+  compute_eval_loss: true  
+  log_prediction: true  
+  rnnt_reduction: mean_volume  
+  skip_nan_grad: true  
 
-  tokenizer:
-    dir: /root/training_parakeet_vi/vietnamese_tokenizer/tokenizer_spe_bpe_v2048
-    type: bpe
-    update_tokenizer: true
-    vocab_size: 2048
-  preprocessor:
-    _target_: nemo.collections.asr.modules.AudioToMelSpectrogramPreprocessor
-    sample_rate: ${model.sample_rate}
-    normalize: per_feature
-    window_size: 0.025
-    window_stride: 0.01
-    window: hann
-    features: 128
-    n_fft: 512
-    log: true
-    frame_splicing: 1
-    dither: 1.0e-05
-    pad_to: 0
-    pad_value: 0.0
-  spec_augment:
-    _target_: nemo.collections.asr.modules.SpectrogramAugmentation
-    freq_masks: 2
-    time_masks: 10
-    freq_width: 27
-    time_width: 0.05
-  encoder:
-    _target_: nemo.collections.asr.modules.ConformerEncoder
-    feat_in: 128
-    feat_out: -1
-    n_layers: 24
-    d_model: 1024
-    use_bias: false
-    subsampling: dw_striding
-    subsampling_factor: 8
-    subsampling_conv_channels: 256
-    causal_downsampling: false
-    reduction: null
-    reduction_position: null
-    reduction_factor: 1
-    ff_expansion_factor: 4
-    self_attention_model: rel_pos
-    n_heads: 8
-    att_context_size: [[-1, -1]]
-    att_context_style: regular
-    xscaling: false
-    untie_biases: true
-    pos_emb_max_len: 5000
-    conv_kernel_size: 9
-    conv_norm_type: batch_norm
-    conv_context_size: null
-    dropout: 0.1
-    dropout_pre_encoder: 0.1
-    dropout_emb: 0.0
-    dropout_att: 0.1
-    stochastic_depth_drop_prob: 0.0
-    stochastic_depth_mode: linear
-    stochastic_depth_start_layer: 1
-  decoder:
-    _target_: nemo.collections.asr.modules.RNNTDecoder
-    normalization_mode: null
-    random_state_sampling: false
-    blank_as_pad: true
-    prednet:
-      pred_hidden: 640
-      pred_rnn_layers: 2
-      t_max: null
-      dropout: 0.2
-    vocab_size: 1024
-  joint:
-    _target_: nemo.collections.asr.modules.RNNTJoint
-    log_softmax: null
-    preserve_memory: false
-    fuse_loss_wer: true
-    fused_batch_size: 4
-    jointnet:
-      joint_hidden: 640
-      activation: relu
-      dropout: 0.2
-      encoder_hidden: 1024
-      pred_hidden: 640
-    num_extra_outputs: 5
-    num_classes: 1024
-  decoding:
-    strategy: greedy_batch
-    model_type: tdt
-    durations: [0, 1, 2, 3, 4]
-    greedy:
-      max_symbols: 10
-    beam:
-      beam_size: 2
-      return_best_hypothesis: false
-      score_norm: true
-      tsd_max_sym_exp: 50
-      alsd_max_target_len: 2.0
-  aux_ctc:
-    ctc_loss_weight: 0.3
-    use_cer: false
-    ctc_reduction: mean_batch
-    decoder:
-      _target_: nemo.collections.asr.modules.ConvASRDecoder
-      feat_in: null
-      num_classes: -1
-      vocabulary: []
-    decoding:
-      strategy: greedy
-  interctc:
-    loss_weights: []
-    apply_at_layers: []
-  loss:
-    loss_name: tdt
-    tdt_kwargs:
-      fastemit_lambda: 0.0
-      clamp: -1.0
-      durations: [0, 1, 2, 3, 4]
-      sigma: 0.02
-      omega: 0.1
-  optim:
-    name: adamw
-    lr: 2e-5
-    betas: [0.9, 0.98]
-    weight_decay: 0.001
-    sched:
-      name: CosineAnnealing
-      warmup_steps: 2000
-      warmup_ratio: null
-      min_lr: 1.0e-07
-      max_steps: 100000
-  target: nemo.collections.asr.models.rnnt_bpe_models.EncDecRNNTBPEModel
+  model_defaults:  
+    enc_hidden: 1024  
+    pred_hidden: 640  
+    joint_hidden: 640  
+    tdt_durations: [0, 1, 2, 3, 4]  
+    num_tdt_durations: 5  
 
-trainer:
-  devices: -1 # number of GPUs, -1 would use all available GPUs
-  num_nodes: 1
-  max_epochs: 50
-  max_steps: -1 # computed at runtime if not set
-  val_check_interval: 1.0 # Set to 0.25 to check 4 times per epoch, or an int for number of iterations
-  accelerator: auto
-  use_distributed_sampler: false
-  strategy:
-    _target_: lightning.pytorch.strategies.DDPStrategy
-    gradient_as_bucket_view: true
-  accumulate_grad_batches: 1
-  gradient_clip_val: 0.0
-  precision: 16 # 16, 32, or bf16
-  log_every_n_steps: 10  # Interval of logging.
-  enable_progress_bar: True
-  num_sanity_val_steps: 0 # number of steps to perform validation steps for sanity check the validation process before starting the training, setting to 0 disables it
-  check_val_every_n_epoch: 10 # number of evaluations on validation every n epochs
-  sync_batchnorm: true
-  enable_checkpointing: False  # Provided by exp_manager
-  logger: false  # Provided by exp_manager
-  benchmark: false # needs to be false for models with variable-length speech input as it slows down training
+  train_ds:  
+    manifest_filepath: ${dataset.train_manifest}  
+    batch_size: 32  
+    batch_duration: 600  
+    use_lhotse: true  
+    skip_missing_manifest_entries: true  
+    sample_rate: ${model.sample_rate}  
+    shuffle: true  
+    num_workers: 16  
+    pin_memory: true  
+    max_duration: 20.0  
+    min_duration: 0.5  
+    text_field: text  
+    use_bucketing: true  
+    bucket_duration_bins: [5.0, 10.0, 15.0, 20.0]  
+    num_buckets: 4  
+    bucket_buffer_size: 10000  
+    shuffle_buffer_size: 5000  
+    augmentor:  
+      white_noise:  
+        prob: 0.3  
+        min_level: -60  
+        max_level: -20  
+      speed_perturb:  
+        prob: 0.5  
+        min_speed_rate: 0.9  
+        max_speed_rate: 1.1  
 
+  validation_ds:  
+    manifest_filepath: ${dataset.validation_manifest}  
+    use_lhotse: true  
+    sample_rate: ${model.sample_rate}  
+    batch_size: 16  
+    shuffle: false  
+    max_duration: 20.0  
+    min_duration: 0.5  
+    num_workers: 8  
+    pin_memory: true  
+    text_field: text  
 
-exp_manager:
-  exp_dir: null
-  name: ${name}
-  create_tensorboard_logger: true
-  create_checkpoint_callback: true
-  checkpoint_callback_params:
-    # in case of multiple validation sets, first one is used
-    monitor: "val_wer"
-    mode: "min"
-    save_top_k: 5
-    always_save_nemo: True # saves the checkpoints as nemo files along with PTL checkpoints
-  resume_if_exists: false
-  resume_ignore_no_checkpoint: false
+  test_ds:  
+    manifest_filepath: ${dataset.test_manifest}  
+    sample_rate: ${model.sample_rate}  
+    batch_size: 16  
+    shuffle: false  
+    num_workers: 8  
+    pin_memory: true  
 
-  create_wandb_logger: false
-  wandb_logger_kwargs:
-    name: null
-    project: null
+  tokenizer:  
+    dir: ${tokenizer_dir}  
+    type: bpe  
+    update_tokenizer: true  
+    vocab_size: 4096  
+    model_type: unigram  
+
+  preprocessor:  
+    _target_: nemo.collections.asr.modules.AudioToMelSpectrogramPreprocessor  
+    sample_rate: ${model.sample_rate}  
+    normalize: per_feature  
+    window_size: 0.025  
+    window_stride: 0.01  
+    window: hann  
+    features: 128  
+    n_fft: 512  
+    log: true  
+    frame_splicing: 1  
+    dither: 1.0e-05  
+    pad_to: 0  
+    pad_value: 0.0  
+
+  spec_augment:  
+    _target_: nemo.collections.asr.modules.SpectrogramAugmentation  
+    freq_masks: 3  
+    time_masks: 8  
+    freq_width: 20  
+    time_width: 0.03  
+
+  encoder:  
+    _target_: nemo.collections.asr.modules.ConformerEncoder  
+    feat_in: 128  
+    feat_out: -1  
+    n_layers: 24  
+    d_model: 1024  
+    use_bias: false  
+    subsampling: dw_striding  
+    subsampling_factor: 8  
+    subsampling_conv_channels: 256  
+    causal_downsampling: false  
+    ff_expansion_factor: 4  
+    self_attention_model: rel_pos  
+    n_heads: 8  
+    att_context_size: [[-1, -1]]  
+    att_context_style: regular  
+    xscaling: false  
+    untie_biases: true  
+    pos_emb_max_len: 5000  
+    conv_kernel_size: 9  
+    conv_norm_type: batch_norm  
+    dropout: 0.1  
+    dropout_pre_encoder: 0.1  
+    dropout_emb: 0.0  
+    dropout_att: 0.1  
+    stochastic_depth_drop_prob: 0.1  
+    stochastic_depth_mode: linear  
+    stochastic_depth_start_layer: 1  
+
+  decoder:  
+    _target_: nemo.collections.asr.modules.RNNTDecoder  
+    normalization_mode: null  
+    random_state_sampling: false  
+    blank_as_pad: true  
+    prednet:  
+      pred_hidden: 640  
+      pred_rnn_layers: 2  
+      t_max: null  
+      dropout: 0.2  
+    vocab_size: 4096  
+
+  joint:  
+    _target_: nemo.collections.asr.modules.RNNTJoint  
+    log_softmax: null  
+    preserve_memory: false  
+    fuse_loss_wer: true  
+    fused_batch_size: 8  
+    jointnet:  
+      joint_hidden: 640  
+      activation: relu  
+      dropout: 0.2  
+      encoder_hidden: 1024  
+      pred_hidden: 640  
+    num_extra_outputs: 5  
+    num_classes: 4096  
+
+  decoding:  
+    strategy: greedy_batch  
+    model_type: tdt  
+    durations: [0, 1, 2, 3, 4]  
+    greedy:  
+      max_symbols: 15  
+    beam:  
+      beam_size: 4  
+      return_best_hypothesis: false  
+      score_norm: true  
+      tsd_max_sym_exp: 50  
+      alsd_max_target_len: 2.0  
+
+  aux_ctc:  
+    ctc_loss_weight: 0.2  
+    use_cer: true  
+    ctc_reduction: mean_batch  
+    decoder:  
+      _target_: nemo.collections.asr.modules.ConvASRDecoder  
+      feat_in: null  
+      num_classes: -1  
+      vocabulary: []  
+    decoding:  
+      strategy: greedy  
+
+  loss:  
+    loss_name: tdt  
+    tdt_kwargs:  
+      fastemit_lambda: 0.001  
+      clamp: -1.0  
+      durations: [0, 1, 2, 3, 4]  
+      sigma: 0.05  
+      omega: 0.15  
+
+  optim:  
+    name: adamw  
+    lr: 5e-6  
+    betas: [0.9, 0.98]  
+    weight_decay: 0.01  
+    sched:  
+      name: CosineAnnealing  
+      warmup_steps: 5000  
+      warmup_ratio: 0.1  
+      min_lr: 1.0e-8  
+      max_steps: 50000  
+
+trainer:  
+  devices: -1  
+  num_nodes: 1  
+  max_epochs: 50  
+  max_steps: -1  
+  val_check_interval: 1000  
+  accelerator: auto  
+  use_distributed_sampler: false  
+  strategy:  
+    _target_: lightning.pytorch.strategies.DDPStrategy  
+    gradient_as_bucket_view: true  
+    find_unused_parameters: false  
+  accumulate_grad_batches: 2  
+  gradient_clip_val: 0.5  
+  precision: bf16-mixed  
+  log_every_n_steps: 25  
+  enable_progress_bar: true  
+  num_sanity_val_steps: 10  
+  check_val_every_n_epoch: 1  
+  sync_batchnorm: true  
+  enable_checkpointing: false  
+  logger: false  
+  benchmark: false  
+
+exp_manager:  
+  exp_dir: /experiments/vietnamese_asr  
+  name: ${name}  
+  create_tensorboard_logger: true  
+  create_wandb_logger: true  
+  wandb_logger_kwargs:  
+    name: "vietnamese_parakeet_finetune"  
+    project: "vietnamese_asr"  
+  create_checkpoint_callback: true  
+  checkpoint_callback_params:  
+    monitor: "val_cer"  
+    mode: "min"  
+    save_top_k: 3  
+    save_last: true  
+    every_n_train_steps: 1000  
+    always_save_nemo: true  
+  resume_if_exists: true  
+  resume_ignore_no_checkpoint: true  
